@@ -1,0 +1,68 @@
+trigger:
+  tags:
+    include:
+      - web-client-*
+
+variables:
+  - group: application-variable-group
+
+  - name: kubectlVersion
+    value: "v1.26.3"
+
+  - name: kustomizationPath
+    value: "Deploy/kubernetes/web-client"
+  
+  - name: devEnvName
+    value: dev-environment
+
+  - name: devEnvName
+    value: dev-environment
+
+  - name: devImageRepository
+    value: "web-client"
+  
+  - name: devDockerBuildContext
+    value: "$(Build.SourcesDirectory)/Frontend/WebClient"
+    
+  - name: devDockerfilePath
+    value: "$(Build.SourcesDirectory)/Frontend/WebClient/docker-prod/Dockerfile"
+
+pool:
+  # vmImage: ubuntu-latest
+  name: default
+
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - template: templates/build-push-publish.yml
+        parameters:
+          dockerRegistryServiceConnection: $(devDockerRegistryServiceConnection)
+          imageRepository: $(devImageRepository)
+          dockerfilePath: $(devDockerfilePath)
+          dockerBuildContext: $(devDockerBuildContext)
+          imageTag: $(Build.SourceVersion)
+          kustomizationPath: $(kustomizationPath)
+
+  - stage: DeployToDevEnv
+    displayName: Deploy to Dev Environment
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployUsingKustomize
+        displayName: Deploy using Kustomize
+        environment: 
+          name: ${{ variables.devEnvName }}
+        strategy:
+          runOnce:
+            deploy:
+               steps:
+                - template: templates/deploy-using-kustomize.yml
+                  parameters:
+                    kubernetesServiceConnection: $(devKubernetesServiceConnection)
+                    kubectlVersion: $(kubectlVersion)
+                    kustomizationOverlayPath: $(devKustomizationOverlayPath)
+                    domainName: $(devDomainName)
+                    containerRegistryType: $(devContainerRegistry)
+                    imageTag: $(Build.SourceVersion)
+                    imagePullSecret: $(devImagePullSecret)

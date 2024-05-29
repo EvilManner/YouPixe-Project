@@ -1,0 +1,59 @@
+trigger:
+  tags:
+    include:
+      - common-*
+
+variables:
+  - group: "application-variable-group"
+
+  - name: kubectlVersion
+    value: "v1.26.3"
+
+  - name: kustomizationPath
+    value: "Deploy/kubernetes/common"
+
+  - name: devEnvName
+    value: dev-environment
+    
+  - name: devImageRepository
+    value: "api-gateway"
+
+pool:
+  # vmImage: ubuntu-latest
+  name: default
+
+stages:
+  - stage: PublishArtifact
+    displayName: Publish Artifact
+    jobs:
+      - job: Publish
+        displayName: Publish
+        steps:
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(Build.SourcesDirectory)/$(kustomizationPath)'
+              artifact: 'kubernetes-manifest'
+              publishLocation: 'pipeline'
+
+  - stage: DeployToDevEnv
+    displayName: Deploy to Dev Environment
+    dependsOn: PublishArtifact
+    condition: succeeded()
+    jobs:
+      - deployment: DeployUsingKustomize
+        displayName: Deploy using Kustomize
+        environment: 
+          name: ${{ Variables.devEnvName }}
+        strategy:
+          runOnce:
+            deploy:
+               steps:
+                - template: templates/deploy-using-kustomize.yml
+                  parameters:
+                    kubernetesServiceConnection: $(devKubernetesServiceConnection)
+                    kubectlVersion: $(kubectlVersion)
+                    kustomizationOverlayPath: $(devKustomizationOverlayPath)
+                    domainName: $(devDomainName)
+                    containerRegistryType: $(devContainerRegistry)
+                    imageTag: $(Build.SourceVersion)
+                    imagePullSecret: $(devImagePullSecret)
